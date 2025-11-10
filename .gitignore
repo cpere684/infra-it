@@ -1,0 +1,7 @@
+# general
+*.zip
+*.tar.gz
+*.pyc
+__pycache__/
+.vscode/
+.idea/

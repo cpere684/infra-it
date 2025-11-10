@@ -1,0 +1,6 @@
+---
+- name: Provision IT / Developer workstation (Ubuntu)
+  hosts: it
+  become: true
+  roles:
+    - it

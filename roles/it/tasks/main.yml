@@ -1,0 +1,182 @@
+---
+# Role: it - prepare developer / IT workstation on Ubuntu
+
+- name: Ensure apt cache is up-to-date
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install base packages required for later steps
+  apt:
+    name: "{{ it_extra_packages | default([]) }}"
+    state: present
+
+# ---------- Docker installation (idempotent) ----------
+- name: Add Docker GPG keyring (curl + gpg)
+  shell: |
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/docker-archive-keyring.gpg
+  become: true
+
+- name: Add Docker apt repository (signed-by keyring)
+  apt_repository:
+    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://download.docker.com/linux/ubuntu {{ ansible_lsb.codename }} stable"
+    filename: docker
+    state: present
+  notify: apt update
+
+- name: Install docker packages
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+    state: latest
+    update_cache: yes
+  ignore_errors: yes
+
+- name: Ensure docker service is enabled and running
+  service:
+    name: docker
+    enabled: yes
+    state: started
+  ignore_errors: yes
+
+- name: Install docker-compose plugin directory
+  file:
+    path: /usr/local/lib/docker/cli-plugins
+    state: directory
+    mode: '0755'
+
+- name: Download docker compose plugin (v2)
+  get_url:
+    url: "https://github.com/docker/compose/releases/download/v2.20.2/docker-compose-linux-x86_64"
+    dest: /usr/local/lib/docker/cli-plugins/docker-compose
+    mode: '0755'
+  args:
+    creates: /usr/local/lib/docker/cli-plugins/docker-compose
+  ignore_errors: yes
+
+# ---------- VS Code (Microsoft repo) ----------
+- name: Add Microsoft GPG keyring for VS Code
+  shell: |
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-archive-keyring.gpg
+  args:
+    creates: /usr/share/keyrings/microsoft-archive-keyring.gpg
+  become: true
+
+- name: Add VS Code repository
+  apt_repository:
+    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-archive-keyring.gpg] https://packages.microsoft.com/repos/code stable main"
+    filename: microsoft-vscode
+    state: present
+  notify: apt update
+
+- name: Install code (Visual Studio Code)
+  apt:
+    name: code
+    state: latest
+  ignore_errors: yes
+
+# ---------- Create IT user ----------
+- name: Ensure it user exists
+  user:
+    name: "{{ it_user }}"
+    state: present
+    groups: sudo
+    shell: /bin/bash
+    create_home: yes
+
+- name: Ensure typical user directories exist for IT user
+  file:
+    path: "/home/{{ it_user }}/{{ item }}"
+    state: directory
+    owner: "{{ it_user }}"
+    group: "{{ it_user }}"
+    mode: '0755'
+  loop:
+    - Documents
+    - Desktop
+    - Projects
+    - .ssh
+
+- name: Add ssh public key for it user
+  authorized_key:
+    user: "{{ it_user }}"
+    key: "{{ ssh_pub_key }}"
+    state: present
+  check_mode: no
+
+# ---------- Security tools ----------
+- name: Install security and utility packages
+  apt:
+    name:
+      - ufw
+      - fail2ban
+      - unattended-upgrades
+    state: present
+
+- name: Configure UFW default policies (enable only on Debian-family)
+  ufw:
+    state: enabled
+    policy: deny
+    logging: 'on'
+  when: ansible_os_family == "Debian"
+  ignore_errors: yes
+
+- name: Allow SSH through UFW
+  ufw:
+    rule: allow
+    name: OpenSSH
+  ignore_errors: yes
+
+- name: Allow Docker ports (common) via UFW (non-exhaustive)
+  ufw:
+    rule: allow
+    port: 2376
+    proto: tcp
+  ignore_errors: yes
+
+- name: Ensure fail2ban is enabled and started
+  service:
+    name: fail2ban
+    state: started
+    enabled: yes
+
+# ---------- SSH hardening (safe defaults) ----------
+- name: Harden SSH server configuration (disable root login and password auth)
+  blockinfile:
+    path: /etc/ssh/sshd_config
+    marker: "# {mark} ANSIBLE-IT-HARDEN"
+    block: |
+      PasswordAuthentication no
+      PermitRootLogin no
+      ChallengeResponseAuthentication no
+  notify: restart ssh
+
+# ---------- Optional networking (apply only when provided) ----------
+- name: Deploy netplan config if netplan_config provided
+  copy:
+    dest: /etc/netplan/01-custom.yaml
+    content: "{{ netplan_config }}"
+    owner: root
+    group: root
+    mode: '0644'
+  when: netplan_config | length > 0
+  notify: apply netplan
+
+# ---------- Add it_user to docker group ----------
+- name: Add it_user to docker group
+  user:
+    name: "{{ it_user }}"
+    groups: docker
+    append: yes
+  ignore_errors: yes
+
+# ---------- Cleanup ----------
+- name: Run apt autoremove/autoclean
+  apt:
+    autoremove: yes
+    autoclean: yes
+  tags: cleanup

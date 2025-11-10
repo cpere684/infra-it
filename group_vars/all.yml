@@ -1,0 +1,27 @@
+# Minimal variables that must be set before running.
+# Edit these before running.
+
+# The SSH public key that will be placed in the created user's authorized_keys.
+# Replace the example key below with the single-line contents of your control machine public key (~/.ssh/infrahub_test.pub)
+ssh_pub_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... replace-with-your-key ... user@example.com"
+
+# Username to create for the IT user
+it_user: itadmin
+
+# Timezone to set on the target host
+timezone: "UTC"
+
+# Optional netplan_config: leave empty unless you mean to change the host's static IP.
+# IMPORTANT: Do NOT set a global netplan_config for multiple hosts. Use host_vars/<hostname>.yml for per-host static IPs.
+netplan_config: ""
+
+# Extra packages for IT role (can be overridden per-group/host)
+it_extra_packages:
+  - build-essential
+  - git
+  - htop
+  - curl
+  - wget
+  - apt-transport-https
+  - ca-certificates
+  - software-properties-common
