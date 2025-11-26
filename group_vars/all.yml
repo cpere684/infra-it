@@ -3,10 +3,10 @@
 
 # The SSH public key that will be placed in the created user's authorized_keys.
 # Replace the example key below with the single-line contents of your control machine public key (~/.ssh/infrahub_test.pub)
-ssh_pub_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... replace-with-your-key ... user@example.com"
+ssh_pub_key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE host@control"
 
 # Username to create for the IT user
-it_user: itadmin
+it_user: username
 
 # Timezone to set on the target host
 timezone: "UTC"
